@@ -1,12 +1,15 @@
 import time
-import math
-import array
-import librosa #python3 -m pip install --upgrade librosa
+# import math
+# import array
+# import librosa #python3 -m pip install --upgrade librosa
 # import pyrubberband as pyrb # python3 -m pip install pyrubberband
-import pyaudio     #python3 -m pip install --upgrade PyAudio
-import wave
-import numpy
+# import pyaudio     #python3 -m pip install --upgrade PyAudio
+# import wave
+# import numpy
 # from threading import Thread
+
+import pygame #sudo apt-get install freepats #python3 -m pip install -U pygame --user
+from midiutil.MidiFile import MIDIFile #python3 -m pip install MIDIUtil
 import tkinter
 from tkinter import *
 from tkinter import ttk
@@ -89,29 +92,65 @@ CHORDS = {"Triades":
                 #'11-13':{"composition":["1","3","5","7","9","11+","13"],"alt_names":""},
             }
            }
+
+
+class midiWrite():
+    def __init__(self):
+        self.filename = "output.mid"
+        # create your MIDI object
+        self.mf = MIDIFile(1)     # only 1 track
+        self.track = 0   # the only track
+        
+        self.time = 0    # start at the beginning
+        self.mf.addTrackName(self.track, self.time, "Sample Track")
+        self.mf.addTempo(self.track, self.time, 120)
+        # add some notes
+        self.channel = 0
+        self.volume = 100
+    def addNote(self,pitch,tim):
+        duration = 1         # 1 beat long
+        self.mf.addNote(self.track, self.channel, pitch, tim, duration, self.volume)
+    def writeFile(self):
+        outf =open("output.mid", 'wb')
+        self.mf.writeFile(outf)
+        self.mf.close()
+        
+class MidiPlay():
+    def __init__(self):
+        self.midi_filename = 'output.mid'
+        # mixer config
+        freq = 44100  # audio CD quality
+        bitsize = -16   # unsigned 16 bit
+        channels = 2  # 1 is mono, 2 is stereo
+        buffer = 1024   # number of samples
+        pygame.mixer.init(freq, bitsize, channels, buffer)
+        # optional volume 0 to 1.0
+        pygame.mixer.music.set_volume(0.8)
+
+    def play_music(self):
+        '''Stream music_file in a blocking manner'''
+        clock = pygame.time.Clock()
+        pygame.mixer.music.load(self.midi_filename)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            clock.tick(30) # check if playback has finished
+
+
+
+
+
 class PlayChord():
     def __init__(self,chord,inst_filename,sample_root_note,alteration,tone,gamme):
         self.gamme = gamme
-        self.sample_root_note = sample_root_note
+#         self.sample_root_note = sample_root_note
         self.chord = chord
         self.alteration = alteration
         self.tone = tone
-        self.SoundBinTab = []
-        self.fullBuff= b''
-        self.durationEvent = 60.0/120./4.0
+#         self.SoundBinTab = []
+#         self.fullBuff= b''
+#         self.durationEvent = 60.0/120./4.0
         self.fname=inst_filename
-
     def playChord(self):
-        self.wf = wave.open(self.fname, 'rb')
-        self.framerate=self.wf.getframerate()
-        self.p = pyaudio.PyAudio()
-        self.chunk = 1024
-        self.stream = self.p.open(format=self.p.get_format_from_width(self.wf.getsampwidth()),
-                    channels=self.wf.getnchannels(),
-#                     channels=1,
-                    rate=self.wf.getframerate(),
-                    output=True)
-        sampleRoot=self.sample_root_note
         pitches = self.chord.get("inter")
         pitches.append(-12)
         corrected_pitches = []
@@ -119,62 +158,27 @@ class PlayChord():
             correctedpicth = pitch+ALTERATIONSDICT.get(self.alteration)+INTERS_MAJEUR.get(self.tone)
             corrected_pitches.append(correctedpicth)
         pitches = corrected_pitches
-        lengthtoRead= 60.0/1./8*44100.0
-        self.La0 = self.wf.readframes(2*int(lengthtoRead))
-        wavArrLa0 = numpy.frombuffer(self.La0, 'short')
-        wavArrLa0=numpy.reshape(wavArrLa0,(1,int(len(self.La0)/2)))#,order="F")
-        arrRos= wavArrLa0[0].astype(numpy.float32)
+        mymidiWrite = midiWrite()
         for pitch in pitches :
-            y = librosa.effects.pitch_shift(arrRos, sr=self.framerate, n_steps=pitch-sampleRoot)
-            bufThird = y.astype(numpy.short)#.tobytes()
-            self.SoundBinTab.append(bufThird)
-        print ('allNotesLoaded')
-        note = 0
-        for SoundBin in self.SoundBinTab :
-            note = note + SoundBin
-        note = note / len(self.SoundBinTab)
-        length = 2*int(self.durationEvent*self.framerate)
-        buff = note.astype(numpy.short).tobytes()
-        for i in range (3):
-            self.stream.write(buff)
-        self.stream.stop_stream()
-        self.stream.close()
-        self.p.terminate()
-        self.wf.close()
+            mymidiWrite.addNote(pitch+60, 0)
+        mymidiWrite.writeFile()
+        myplay = MidiPlay()
+        myplay.play_music()
     def playGamme(self):
-        self.wf = wave.open(self.fname, 'rb')
-        self.framerate=self.wf.getframerate()
-        self.p = pyaudio.PyAudio()
-        self.chunk = 1024
-        self.stream = self.p.open(format=self.p.get_format_from_width(self.wf.getsampwidth()),
-                    channels=self.wf.getnchannels(),
-#                     channels=1,
-                    rate=self.wf.getframerate(),
-                    output=True)
-        sampleRoot=self.sample_root_note
         pitches = self.gamme
         corrected_pitches = []
         for pitch in pitches :
             correctedpicth = pitch#+INTERS_MAJEUR.get(self.tone)
             corrected_pitches.append(correctedpicth)
         pitches = corrected_pitches
-        lengthtoRead= 60.0/60./8*44100.0
-        self.La0 = self.wf.readframes(2*int(lengthtoRead))
-        wavArrLa0 = numpy.frombuffer(self.La0, 'short')
-        wavArrLa0=numpy.reshape(wavArrLa0,(1,int(len(self.La0)/2)))#,order="F")
-        arrRos= wavArrLa0[0].astype(numpy.float32)
+        mymidiWrite = midiWrite()
+        index= 0
         for pitch in pitches :
-            y = librosa.effects.pitch_shift(arrRos, sr=self.framerate, n_steps=pitch-sampleRoot)
-            bufThird = y.astype(numpy.short)#.tobytes()
-            self.SoundBinTab.append(bufThird)
-        buff = b""
-        for SoundBin in self.SoundBinTab :
-            buff += SoundBin.astype(numpy.short).tobytes()
-        self.stream.write(buff)
-        self.stream.stop_stream()
-        self.stream.close()
-        self.p.terminate()
-        self.wf.close()
+            mymidiWrite.addNote(pitch+60, index)
+            index+=1
+        mymidiWrite.writeFile()
+        myplay = MidiPlay()
+        myplay.play_music()
 class Application(Toplevel):
     def __init__(self, master, **kw):
         Toplevel.__init__(self, master, **kw)
@@ -187,18 +191,18 @@ class Application(Toplevel):
         self.inst_file_name = "guitar-onenote-vibro-fuzzyB.wav"
         self.chordName = self.listChords[0]
         self.chord = self.dictAllChords.get(self.chordName[0])
-        self.inst_label = Label(self.MainPanel, text="Instrument")
-        self.inst_label.pack()
-        inst_var = StringVar(value=["piano","guitare"])
-        self.inst_lb = Listbox(self.MainPanel,listvariable=inst_var,
-    height=4,)
-        self.inst_lb.pack()
-        scrollbar_inst = ttk.Scrollbar(self.inst_lb,orient='vertical',command=self.inst_lb.yview)
-        scrollbar_inst.pack(side = RIGHT)#, fill = BOTH)
-        self.inst_lb['yscrollcommand'] = scrollbar_inst.set
-        self.inst_lb.bind('<<ListboxSelect>>', self.instSelect)
-        self.MainPanel.add(self.inst_label)
-        self.MainPanel.add(self.inst_lb)
+#         self.inst_label = Label(self.MainPanel, text="Instrument")
+#         self.inst_label.pack()
+#         inst_var = StringVar(value=["piano","guitare"])
+#         self.inst_lb = Listbox(self.MainPanel,listvariable=inst_var,
+#     height=4,)
+#         self.inst_lb.pack()
+#         scrollbar_inst = ttk.Scrollbar(self.inst_lb,orient='vertical',command=self.inst_lb.yview)
+#         scrollbar_inst.pack(side = RIGHT)#, fill = BOTH)
+#         self.inst_lb['yscrollcommand'] = scrollbar_inst.set
+#         self.inst_lb.bind('<<ListboxSelect>>', self.instSelect)
+#         self.MainPanel.add(self.inst_label)
+#         self.MainPanel.add(self.inst_lb)
         
         self.tone_label = Label(self.MainPanel, text="Tonalité")
         self.tone_label.pack()
@@ -287,42 +291,24 @@ class Application(Toplevel):
 #         self.MainPanel.add(self.canvas)
         self.makeGamme()
     def toneSelect(self,event):
-        print("toneSelect")
         selected_indice = self.tone_lb.curselection()
         if len(selected_indice)>0:
-            print(selected_indice)
             self.tone = GAMME[selected_indice[0]]
         if event is not None :
             self.computeGammeChord()
-#         print(GAMME[selected_indice[0]])
         
     def alterSelect(self,event):
-        print("alterSelect")
         selected_indice = self.alter_lb.curselection()
         if len(selected_indice)>0:
-            print(selected_indice)
             self.alteration = ALTERATIONS[selected_indice[0]]
         if event is not None :
             self.computeGammeChord()
-#         print(ALTERATIONS[selected_indice[0]])
-    def instSelect(self,event):
-        print("instSelect")
-        selected_indice = self.inst_lb.curselection()
-        if len(selected_indice)>0:
-            print(selected_indice)
-            self.inst_file_name = ["Moo-Piano-C2.wav","guitar-onenote-vibro-fuzzyB.wav"][selected_indice[0]]
-            self.sample_root_note = 0
-        if self.inst_file_name == "guitar-onenote-vibro-fuzzyB.wav":
-            self.sample_root_note=-1
 
     def chordSelect(self,event):
-        print("chordSelect")
         selected_indice = self.chord_lb.curselection()
         if len(selected_indice)>0:
-            print(selected_indice)
             self.chordName = self.listChords[selected_indice[0]]
             self.chord = self.dictAllChords.get(self.chordName[0])
-            print (self.chord)
         if event is not None :
             self.computeGammeChord()
     def drawLine(self,x1,y1,x2,y2,color="white"):
@@ -368,7 +354,7 @@ class Application(Toplevel):
 #         print(self.dictAllChords)
     def computeGammeChord(self):
         self.chordSelect(None)
-        self.instSelect(None)
+#         self.instSelect(None)
         self.alterSelect(None)
         self.toneSelect(None)
         self.makeGamme()
@@ -423,16 +409,16 @@ class Application(Toplevel):
         self.gammeText.insert(END,gammeTxt)
 
     def makeChord(self):
-        print("---")
+#         print("---")
         chord = self.chord
-        print(self.tone)
-        print(self.alteration)
-        print (chord)
+#         print(self.tone)
+#         print(self.alteration)
+#         print (chord)
         chordlabelText = self.tone+" "+self.alteration+" "+self.chord.get("name")+" aussi noté : "+self.chord.get("alt_names")
         self.chordLabelText.set(chordlabelText)
         chordText =""
-        print(self.chord.get("composition"))
-        print(self.gamme)
+#         print(self.chord.get("composition"))
+#         print(self.gamme)
         for hauteur in self.chord.get("composition"): #5-
             chordText += hauteur
             ht = hauteur.replace("-","").replace("+","")
